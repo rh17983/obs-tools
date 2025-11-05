@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: obs-tools-links
+  namespace: obs-tools
+data:
+  sections.html: |
+    <div class="section">
+      <h2>SHARED ZURICH</h2>
+      <div class="card-container">
+        <div class="card"><a href="https://grafana.example.com/">Grafana Dashboard</a></div>
+        <div class="card"><a href="https://prometheus.example.com/">Prometheus</a></div>
+        <div class="card"><a href="https://alertmanager.example.com/">Alert Manager</a></div>
+      </div>
+    </div>

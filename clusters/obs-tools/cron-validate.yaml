@@ -1,0 +1,40 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: obs-tools-validate
+  namespace: obs-tools
+spec:
+  schedule: "* * * * *"       # every minute
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 60
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: obs-tools-worker
+          restartPolicy: OnFailure
+          containers:
+          - name: validator
+            image: docker.io/hedgefock/obs-tools-worker:latest
+            command: ["/bin/sh","-lc"]
+            args:
+              - |
+                set -euo pipefail
+                python /app/validate_from_sections.py /cfg/sections.html /data/links-out.yaml
+            volumeMounts:
+              - name: data
+                mountPath: /data
+              - name: cfg
+                mountPath: /cfg
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: obs-tools-web-pvc
+            - name: cfg
+              configMap:
+                name: obs-tools-links
+                items:
+                  - key: sections.html
+                    path: sections.html

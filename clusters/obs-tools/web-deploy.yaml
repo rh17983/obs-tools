@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: obs-tools-web
+  namespace: obs-tools
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: obs-tools-web } }
+  template:
+    metadata: { labels: { app: obs-tools-web } }
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.27-alpine
+        ports: [{ containerPort: 80 }]
+        volumeMounts:
+          - name: html
+            mountPath: /usr/share/nginx/html
+          - name: data
+            mountPath: /usr/share/nginx/html    # links-out.yaml written here
+      volumes:
+        - name: html
+          configMap:
+            name: obs-tools-web
+            items:
+              - key: index.html
+                path: index.html
+        - name: data
+          persistentVolumeClaim:
+            claimName: obs-tools-web-pvc
