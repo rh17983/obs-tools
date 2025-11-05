@@ -37,11 +37,11 @@ def _normalize_url(url: str) -> str:
 
 
 async def _fetch_head_or_get(session: aiohttp.ClientSession, url: str) -> Tuple[Optional[int], str, str]:
-    """Try HEAD, fallback to GET."""
+    """Try to fetch URL with HEAD method first; if it fails, use GET with Range header. Return (status_code, reason, final_url)."""
 
+    # Request with HEAD method first. Requesting headers only.
     try:
         async with session.head(url, allow_redirects=True) as resp:
-            """ Request with HEAD method first. Requesting headers only. """
             return resp.status, resp.reason or "", str(resp.url)
     except ClientResponseError as e:
         if e.status not in (400, 401, 403, 404, 405, 500, 501, 502, 503, 504):
@@ -49,10 +49,10 @@ async def _fetch_head_or_get(session: aiohttp.ClientSession, url: str) -> Tuple[
     except Exception:
         pass
 
+    # Fallback to GET request with Range header to minimize data transfer. Requesting first byte only.
     try:
         headers = {"Range": "bytes=0-0"}
         async with session.get(url, allow_redirects=True, headers=headers) as resp:
-            """Request with Range header to minimize data transfer. Requesting first byte only."""
             return resp.status, resp.reason or "", str(resp.url)
     except ClientResponseError as e:
         return e.status, e.message or "HTTP error", url
@@ -102,11 +102,17 @@ async def check_one(url: str, session: aiohttp.ClientSession, sem: asyncio.Semap
 
 
 async def process(data):
-    """Process the entire data structure asynchronously. Return updated data."""
+    """Coroutines to process the entire data structure asynchronously. Return updated data."""
 
     import aiohttp
+
+    # Create a timeout for all requests.
     timeout = aiohttp.ClientTimeout(total=TIMEOUT_SECONDS)
+
+    # Create a semaphore to limit concurrency.
     sem = asyncio.Semaphore(CONCURRENCY)
+
+    # Build index map to correlate URLs back to their locations in the data structure.
     index_map = []
 
     # Collect (region_idx, region_key, site_idx, site_name, url)
@@ -123,12 +129,14 @@ async def process(data):
                     if isinstance(meta, dict) and "link" in meta:
                         index_map.append((i, region, j, site_name, meta["link"]))
 
+    # Perform all requests concurrently. Reuse a single ClientSession for efficiency.
     async with aiohttp.ClientSession(timeout=timeout, headers={"User-Agent": "link-checker/2.1 (+curl-compatible)"}) as session:
-        """Create coroutines for all URLs to check."""
+        """Create coroutines for all URLs to check"""
         coros = [check_one(url, session, sem) for *_, url in index_map]
+        # Gather results with error handling. Return list of status dicts.
         results = await asyncio.gather(*coros)
 
-    # Write back results
+    # Write back results. Update the original data structure with status info.
     for (i, region, j, site_name, _), status in zip(index_map, results):
         meta = data[i][region][j][site_name]
         meta["status"] = status
@@ -165,11 +173,13 @@ def main():
 
     if not isinstance(data, list):
         print("Input must be a list of region objects:")
-        print("  - EU:\n      - website-1:\n          link: https://...\n          status: ''")
         sys.exit(2)
 
     start_time = time.perf_counter()
+
+    # Run the async processing. Blocks until complete.
     updated = asyncio.run(process(data))
+
     elapsed = time.perf_counter() - start_time
     print(f"Total runtime: {elapsed:.2f} seconds")
 

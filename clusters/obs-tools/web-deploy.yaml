@@ -5,26 +5,33 @@ metadata:
   namespace: obs-tools
 spec:
   replicas: 1
-  selector: { matchLabels: { app: obs-tools-web } }
+  selector:
+    matchLabels: { app: obs-tools-web }
   template:
-    metadata: { labels: { app: obs-tools-web } }
+    metadata:
+      labels: { app: obs-tools-web }
     spec:
       containers:
       - name: nginx
         image: nginx:1.27-alpine
-        ports: [{ containerPort: 80 }]
+        ports:
+        - containerPort: 80
         volumeMounts:
-          - name: html
-            mountPath: /usr/share/nginx/html
+          # 1) Mount the PVC as the site root so links-out.yaml is here
           - name: data
-            mountPath: /usr/share/nginx/html    # links-out.yaml written here
+            mountPath: /usr/share/nginx/html
+          # 2) Mount ONLY the index.html file from the ConfigMap into that same dir via subPath
+          - name: html
+            mountPath: /usr/share/nginx/html/index.html
+            subPath: index.html
+            readOnly: true
       volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: obs-tools-web-pvc
         - name: html
           configMap:
             name: obs-tools-web
             items:
-              - key: index.html
-                path: index.html
-        - name: data
-          persistentVolumeClaim:
-            claimName: obs-tools-web-pvc
+            - key: index.html
+              path: index.html
